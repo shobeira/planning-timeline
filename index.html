@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planning Timeline</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============================================================
+     SAMPLE DATA — edit these arrays to populate your timeline
+     ============================================================ -->
+<script>
+const MILESTONES = [
+  // --- Home: renovating and moving into a new house ---
+  { id: "01-20260326", year: 2025, week: 3,  title: "House Inspection",          desc: "Building inspection passed, offer accepted",             status: "done",       tag: "Home" },
+  { id: "02-20260326", year: 2025, week: 7,  title: "Mortgage Approved",         desc: "Bank loan finalised at fixed rate",                      status: "done",       tag: "Home" },
+  { id: "03-20260326", year: 2025, week: 12, title: "Architect Plans Done",      desc: "Floor plans and renovation drawings signed off",         status: "done",       tag: "Home" },
+  { id: "04-20260326", year: 2025, week: 20, title: "Kitchen Renovation",        desc: "Full kitchen remodel — new cabinets, benchtops, oven",   status: "inprogress", tag: "Home" },
+  { id: "05-20260326", year: 2025, week: 28, title: "Bathroom Remodel",          desc: "New tiling, vanity, and walk-in shower",                 status: "planned",    tag: "Home" },
+  { id: "06-20260326", year: 2025, week: 36, title: "Garden Landscaping",        desc: "Raised beds, patio area, and native planting",           status: "planned",    tag: "Home" },
+  { id: "07-20260326", year: 2025, week: 44, title: "Final Inspection",          desc: "Council sign-off and certificate of occupancy",          status: "planned",    tag: "Home" },
+  { id: "08-20260326", year: 2025, week: 49, title: "Moving Day",               desc: "Removalists booked, keys collected, moved in!",          status: "planned",    tag: "Home" },
+
+  // --- Café: opening a neighbourhood café ---
+  { id: "09-20260326", year: 2025, week: 6,  title: "Business Plan Written",     desc: "Financial projections, menu concept, target market",      status: "done",       tag: "Café" },
+  { id: "10-20260326", year: 2025, week: 10, title: "Lease Signed",             desc: "Secured a shopfront on the high street",                 status: "done",       tag: "Café" },
+  { id: "11-20260326", year: 2025, week: 18, title: "Council Permits",          desc: "Food handling and outdoor seating permits approved",      status: "done",       tag: "Café" },
+  { id: "12-20260326", year: 2025, week: 27, title: "Interior Fit-Out",         desc: "Counter, seating, lighting, and espresso bar installed",  status: "inprogress", tag: "Café" },
+  { id: "13-20260326", year: 2025, week: 35, title: "Equipment & Suppliers",    desc: "Coffee machine, grinder, fridges, and local suppliers",   status: "planned",    tag: "Café" },
+  { id: "14-20260326", year: 2025, week: 41, title: "Hire & Train Staff",       desc: "Two baristas and a part-time kitchen hand",               status: "planned",    tag: "Café" },
+  { id: "15-20260326", year: 2025, week: 50, title: "Soft Opening",             desc: "Friends and family trial weekend",                       status: "planned",    tag: "Café" },
+  { id: "16-20260326", year: 2026, week: 3,  title: "Grand Opening",            desc: "Ribbon cutting, local press, opening week specials",      status: "planned",    tag: "Café" },
+
+  // --- Wellness: a year-long health and fitness journey ---
+  { id: "17-20260326", year: 2025, week: 4,  title: "Health Check-Up",          desc: "Full blood work, GP review, baseline measurements",       status: "done",       tag: "Wellness" },
+  { id: "18-20260326", year: 2025, week: 8,  title: "Gym Membership",           desc: "Signed up at the local gym, 3 sessions per week",        status: "done",       tag: "Wellness" },
+  { id: "19-20260326", year: 2025, week: 16, title: "Couch to 5K Done",         desc: "Completed the 9-week running programme",                 status: "done",       tag: "Wellness" },
+  { id: "20-20260326", year: 2025, week: 24, title: "Nutrition Plan",           desc: "Working with a dietitian on balanced meal prep",          status: "inprogress", tag: "Wellness" },
+  { id: "21-20260326", year: 2025, week: 32, title: "First 10K Run",            desc: "City fun run — target time under 60 minutes",             status: "planned",    tag: "Wellness" },
+  { id: "22-20260326", year: 2025, week: 42, title: "Wellness Retreat",         desc: "Weekend retreat — yoga, meditation, digital detox",       status: "planned",    tag: "Wellness" },
+  { id: "23-20260326", year: 2026, week: 5,  title: "Half Marathon",            desc: "Registered for the January half marathon",                status: "planned",    tag: "Wellness" },
+  { id: "24-20260326", year: 2026, week: 13, title: "One-Year Review",          desc: "Compare results to baseline, celebrate progress",         status: "planned",    tag: "Wellness" },
+];
+
+const TAGS = ["Home", "Café", "Wellness"];
+
+/* Cool/muted palette for status colours */
+const STATUS_PALETTE = ["#4A9D8F","#D4A843","#7B6FA6","#C46D5E","#5B8FA8","#8DAA5B","#B07AA1","#6C8EAD"];
+
+/* Statuses */
+const INIT_STATUSES = [
+  { key: "planned",    label: "Planned",     color: "#7B6FA6" },
+  { key: "inprogress", label: "In Progress", color: "#D4A843" },
+  { key: "done",       label: "Done",        color: "#4A9D8F" },
+];
+
+/* Vibrant palette for tags */
+const TAG_PALETTE = [
+  "#2196F3","#E91E63","#4CAF50","#FF5722","#9C27B0",
+  "#00BCD4","#FF9800","#3F51B5","#8BC34A","#F44336",
+  "#009688","#FFC107","#673AB7","#CDDC39","#E040FB",
+  "#00ACC1","#FF6E40","#7C4DFF","#69F0AE","#FF4081",
+  "#1DE9B6","#FFAB40","#536DFE","#B2FF59","#F50057",
+  "#18FFFF","#FF6D00","#D500F9","#76FF03","#FF1744",
+];
+</script>
+
+<!-- ============================================================ -->
+
+<div class="header">
+  <div>
+    <h1><span class="dot">●</span> Planning Timeline</h1>
+    <p class="hint">shift+scroll to pan · ctrl+scroll to zoom · drag to reschedule · double-click timeline to add</p>
+  </div>
+  <div class="toolbar">
+    <button class="btn" id="zoomOut">Zoom −</button>
+    <button class="btn" id="zoomIn">Zoom +</button>
+    <button class="btn" id="resetView">Reset View</button>
+    <span class="sep"></span>
+    <button class="btn btn-accent" id="addBtn">+ Add</button>
+    <button class="btn" id="batchAddBtn">Batch Add</button>
+    <button class="btn" id="tagsBtn">Tags</button>
+    <button class="btn" id="statusBtn">Status</button>
+    <span class="sep"></span>
+    <button class="btn" id="saveData">Save Data</button>
+    <button class="btn" id="loadData">Load Data</button>
+    <button class="btn btn-danger" id="clearAll">Clear All</button>
+    <span class="export-msg" id="exportMsg"></span>
+  </div>
+</div>
+
+<div class="filter-bar" id="filterBar"></div>
+<input type="file" id="fileInput" accept=".json" style="display:none">
+
+<div class="track-wrap" id="track">
+  <div class="track-inner" id="inner">
+    <div class="axis"></div>
+  </div>
+</div>
+
+<div class="ms-list">
+  <h3 id="msCount"></h3>
+  <div class="ms-list-items" id="msListItems"></div>
+</div>
+
+<!-- milestone modal -->
+<div class="modal-bg" id="modalBg" style="display:none">
+  <div class="modal" id="modal">
+    <h2 id="modalTitle">Add Milestone</h2>
+    <div id="fIdRow" style="display:none; font-size:10px; font-family:var(--font-mono); color:#555; margin-bottom:12px;">ID: <span id="fId"></span></div>
+    <div class="fields">
+      <label>Title <input type="text" id="fTitle" placeholder="Milestone title"></label>
+      <label>Description <input type="text" id="fDesc" placeholder="Brief description"></label>
+      <div class="row">
+        <label>Year <select id="fYear"></select></label>
+        <label>Month <select id="fMonth"></select></label>
+      </div>
+      <label>When in month
+        <div class="period-picks" id="fPeriod"></div>
+      </label>
+      <div id="weekPreview" style="font-size:11px;font-family:var(--font-mono);color:#888;padding:2px 0 0;"></div>
+      <label>Tag <select id="fTag"></select></label>
+      <label>Status
+        <div class="status-picks" id="fStatus"></div>
+      </label>
+    </div>
+    <div class="actions" id="modalActions"></div>
+  </div>
+</div>
+
+<!-- tag manager modal -->
+<div class="modal-bg" id="tagModalBg" style="display:none">
+  <div class="modal" id="tagModal">
+    <h2>Manage Tags</h2>
+    <div class="tag-list" id="tagList"></div>
+    <div class="tag-add-row">
+      <input type="text" id="newTagInput" placeholder="New tag name">
+      <button class="btn btn-accent btn-sm" id="addTagBtn">Add</button>
+    </div>
+    <div class="actions" style="margin-top:16px">
+      <button class="btn" id="closeTagModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- status manager modal -->
+<div class="modal-bg" id="statusModalBg" style="display:none">
+  <div class="modal" id="statusModal">
+    <h2>Manage Statuses</h2>
+    <div class="tag-list" id="statusList"></div>
+    <div class="tag-add-row">
+      <input type="text" id="newStatusInput" placeholder="New status name">
+      <button class="btn btn-accent btn-sm" id="addStatusBtn">Add</button>
+    </div>
+    <div class="actions" style="margin-top:16px">
+      <button class="btn" id="closeStatusModal">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- batch add modal -->
+<div class="modal-bg" id="batchModalBg" style="display:none">
+  <div class="modal" style="width:600px;">
+    <h2>Batch Add Milestones</h2>
+    <p style="font-size:12px;font-family:var(--font-mono);color:#888;margin-bottom:8px;">
+      One milestone per line. Fields separated by <b>,</b> (comma)
+    </p>
+    <p style="font-size:11px;font-family:var(--font-mono);color:#666;margin-bottom:12px;">
+      Format: <span style="color:#aaa;">title, date, early/mid/late, tag, status</span><br>
+      Only title and date are required. Defaults: mid, no tag, planned.<br>
+      Date formats: <span style="color:#aaa;">Mar 2025, March 2025, 2025-03, 03/2025, 032025</span><br>
+      Period shorthand: <span style="color:#aaa;">e = Early, m = Mid, l = Late</span><br>
+      Lines starting with <span style="color:#aaa;">#</span> are ignored (comments).
+    </p>
+    <textarea id="batchInput" style="
+      width:100%; height:200px; padding:10px; font-size:12px; font-family:var(--font-mono);
+      background:#222; color:var(--text); border:1px solid #333; border-radius:6px;
+      outline:none; resize:vertical; line-height:1.6;
+    " placeholder="Design mockups, Jun 2025, e, Marketing
+Backend API, 2025-08, mid, Product, inprogress
+Public release, 11/2025, late, Product
+Quick fix, 032026, , Operations, done"></textarea>
+    <div id="batchPreview" style="margin-top:10px;font-size:11px;font-family:var(--font-mono);color:#888;"></div>
+    <div class="actions" style="margin-top:12px">
+      <button class="btn btn-accent" id="batchImport">Import</button>
+      <button class="btn" id="batchCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
