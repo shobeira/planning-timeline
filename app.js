@@ -256,20 +256,16 @@ function render() {
     $inner.appendChild(el);
   });
 
-  /* --- check card overflow and switch to horizontal if needed --- */
-  const TRACK_H = 560;
-  const AXIS_Y = 280;
+  /* --- flip cards to horizontal if they overflow the track --- */
   requestAnimationFrame(() => {
     $inner.querySelectorAll(".ms").forEach(msEl => {
       const card = msEl.querySelector(".card");
       if (!card) return;
-
       const cardRect = card.getBoundingClientRect();
       const trackRect = $track.getBoundingClientRect();
       const cardTop = cardRect.top - trackRect.top;
       const cardBot = cardRect.bottom - trackRect.top;
-
-      if (cardTop < 0 || cardBot > TRACK_H) {
+      if (cardTop < 0 || cardBot > 560) {
         card.classList.add("card-hz");
       }
     });
@@ -513,7 +509,6 @@ function openModal(mode, ms, presetYear, presetWeek) {
     tags.push(trimmed);
     tagColors[trimmed] = TAG_PALETTE[tags.length % TAG_PALETTE.length];
     visibleTags.add(trimmed);
-    // add to dropdown and select it
     const opt = document.createElement("option"); opt.value = trimmed; opt.textContent = trimmed;
     $tag.appendChild(opt);
     $tag.value = trimmed;
