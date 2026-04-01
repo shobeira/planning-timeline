@@ -103,7 +103,7 @@ function renderFilters() {
     const pill = document.createElement("div");
     const active = visibleTags.has(tag);
     pill.className = "filter-pill " + (active ? "active" : "inactive");
-    const tc = TAG_PALETTE[i % TAG_PALETTE.length];
+    const tc = getTagColor(tag);
     pill.innerHTML = `<span class="pill-dot" style="background:${tc}"></span>${tag}`;
     pill.onclick = () => { if (active) visibleTags.delete(tag); else visibleTags.add(tag); renderFilters(); render(); };
     tg.appendChild(pill);
@@ -254,6 +254,25 @@ function render() {
     });
 
     $inner.appendChild(el);
+  });
+
+  /* --- check card overflow and switch to horizontal if needed --- */
+  const TRACK_H = 560;
+  const AXIS_Y = 280;
+  requestAnimationFrame(() => {
+    $inner.querySelectorAll(".ms").forEach(msEl => {
+      const card = msEl.querySelector(".card");
+      if (!card) return;
+
+      const cardRect = card.getBoundingClientRect();
+      const trackRect = $track.getBoundingClientRect();
+      const cardTop = cardRect.top - trackRect.top;
+      const cardBot = cardRect.bottom - trackRect.top;
+
+      if (cardTop < 0 || cardBot > TRACK_H) {
+        card.classList.add("card-hz");
+      }
+    });
   });
 
   /* --- bottom list grouped by quarter --- */
@@ -481,6 +500,25 @@ function openModal(mode, ms, presetYear, presetWeek) {
     if (ms && ms.tag === t) opt.selected = true;
     $tag.appendChild(opt);
   });
+
+  // inline new tag creation
+  document.getElementById("fNewTag").onclick = () => {
+    const name = prompt("New tag name:");
+    if (!name || !name.trim()) return;
+    const trimmed = name.trim();
+    if (tags.includes(trimmed)) {
+      $tag.value = trimmed;
+      return;
+    }
+    tags.push(trimmed);
+    tagColors[trimmed] = TAG_PALETTE[tags.length % TAG_PALETTE.length];
+    visibleTags.add(trimmed);
+    // add to dropdown and select it
+    const opt = document.createElement("option"); opt.value = trimmed; opt.textContent = trimmed;
+    $tag.appendChild(opt);
+    $tag.value = trimmed;
+    autoSave(); renderFilters();
+  };
 
   renderStatusPicks();
 

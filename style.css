@@ -138,6 +138,17 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-body);
 }
 .card-btn.del { color: #e55; border-color: #e5555544; }
 
+/* horizontal card variant — used when vertical card would overflow track */
+.ms .card.card-hz {
+  min-width: 260px; max-width: 360px; padding: 8px 14px;
+}
+.ms .card.card-hz .card-head { margin-bottom: 2px; }
+.ms .card.card-hz .card-title { font-size: 12px; }
+.ms .card.card-hz .card-desc { display: none; }
+.ms .card.card-hz .card-meta { margin-top: 4px; }
+.ms .card.card-hz .card-id { margin-top: 2px; }
+.ms .card.card-hz .card-actions { margin-top: 4px; }
+
 /* ---------- bottom list ---------- */
 .ms-list { padding: 24px 32px; }
 .ms-list h3 { font-size: 14px; color: #887e72; font-family: var(--font-mono); font-weight: 400; margin-bottom: 12px; }

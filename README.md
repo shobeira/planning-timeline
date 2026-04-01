@@ -1,8 +1,8 @@
-# Planning Timeline
+# Week-based planning timeline
 
 A simple, interactive horizontal timeline for planning milestones across multiple life projects. No installation, no accounts, no internet required — just open a file in your browser.
 
-**[Live Demo →](https://timeline.shobeira.com)**
+![Week-based planning timeline](screenshot.png)
 
 ## How to Use
 
