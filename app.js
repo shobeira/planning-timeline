@@ -11,7 +11,7 @@ let isPanning = false, panStartX = 0, panStartVal = 0;
 let dragId = null;
 
 // filters
-let visibleTags = new Set(tags);
+let visibleTags = new Set([...tags, "__untagged__"]);
 let visibleStatuses = new Set(statuses.map(s => s.key));
 
 /* ID generator: nn-yyyymmdd */
@@ -384,7 +384,7 @@ document.getElementById("clearAll").onclick = () => {
   tags = [];
   tagColors = {};
   statuses = JSON.parse(JSON.stringify(INIT_STATUSES));
-  visibleTags = new Set();
+  visibleTags = new Set(["__untagged__"]);
   visibleStatuses = new Set(statuses.map(s => s.key));
   zoom = 1; panX = 0;
   autoSave();
@@ -887,7 +887,7 @@ function loadFromStorage() {
     if (data.tags) tags = data.tags;
     if (data.tagColors) tagColors = data.tagColors;
     if (data.statuses) statuses = data.statuses;
-    visibleTags = new Set(tags);
+    visibleTags = new Set([...tags, "__untagged__"]);
     visibleStatuses = new Set(statuses.map(s => s.key));
     migrateIds();
     return true;
@@ -933,7 +933,7 @@ document.getElementById("fileInput").onchange = (e) => {
       if (data.tags) tags = data.tags;
       if (data.tagColors) tagColors = data.tagColors;
       if (data.statuses) statuses = data.statuses;
-      visibleTags = new Set(tags);
+      visibleTags = new Set([...tags, "__untagged__"]);
       visibleStatuses = new Set(statuses.map(s => s.key));
       migrateIds();
       autoSave();
