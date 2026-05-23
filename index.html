@@ -52,6 +52,7 @@ const STATUS_PALETTE = ["#4A9D8F","#D4A843","#7B6FA6","#C46D5E","#5B8FA8","#8DAA
 
 /* Statuses */
 const INIT_STATUSES = [
+  { key: "undefined",  label: "Undefined",   color: "#6C8EAD" },
   { key: "planned",    label: "Planned",     color: "#7B6FA6" },
   { key: "inprogress", label: "In Progress", color: "#D4A843" },
   { key: "done",       label: "Done",        color: "#4A9D8F" },
@@ -175,7 +176,7 @@ const TAG_PALETTE = [
     </p>
     <p style="font-size:11px;font-family:var(--font-mono);color:#666;margin-bottom:12px;">
       Format: <span style="color:#aaa;">title, date, early/mid/late, tag, status</span><br>
-      Only title and date are required. Defaults: mid, no tag, planned.<br>
+      Only title and date are required. Defaults: mid, no tag, undefined.<br>
       Date formats: <span style="color:#aaa;">Mar 2025, March 2025, 2025-03, 03/2025, 032025</span><br>
       Period shorthand: <span style="color:#aaa;">e = Early, m = Mid, l = Late</span><br>
       Lines starting with <span style="color:#aaa;">#</span> are ignored (comments).

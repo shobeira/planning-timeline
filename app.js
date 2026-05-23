@@ -406,7 +406,7 @@ $track.addEventListener("dblclick", e => {
    MILESTONE MODAL
    ============================================================ */
 const $modalBg = document.getElementById("modalBg");
-let modalMode = "add", modalMs = null, modalStatus = "planned", modalPeriod = "early";
+let modalMode = "add", modalMs = null, modalStatus = "undefined", modalPeriod = "early";
 const PERIODS = [
   { key: "early", label: "Early", dayOffset: 3 },
   { key: "mid",   label: "Mid",   dayOffset: 14 },
@@ -424,7 +424,7 @@ function openModal(mode, ms, presetYear, presetWeek) {
   } else {
     document.getElementById("fIdRow").style.display = "none";
   }
-  modalStatus = ms ? ms.status : "planned";
+  modalStatus = ms ? ms.status : "undefined";
 
   let initYear, initMonth;
   if (ms) {
@@ -791,8 +791,8 @@ function parseBatchLines(text) {
 
     const tag = parts[3] || "";
 
-    const statusStr = (parts[4] || "planned").toLowerCase().replace(/\s+/g, "");
-    let statusKey = "planned";
+    const statusStr = (parts[4] || "undefined").toLowerCase().replace(/\s+/g, "");
+    let statusKey = "undefined";
     const found = statuses.find(s => s.key === statusStr || s.label.toLowerCase().replace(/\s+/g, "") === statusStr);
     if (found) statusKey = found.key;
 
