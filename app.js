@@ -8,7 +8,7 @@ tags.forEach((t, i) => { tagColors[t] = TAG_PALETTE[i % TAG_PALETTE.length]; });
 let statuses = JSON.parse(JSON.stringify(INIT_STATUSES));
 let zoom = 1, panX = 0;
 let isPanning = false, panStartX = 0, panStartVal = 0;
-let dragId = null;
+let dragId = null, dragIsTask = false, dragDurationWeeks = 0, dragMoved = false;
 
 // filters
 let visibleTags = new Set([...tags, "__untagged__"]);
@@ -57,7 +57,10 @@ function weekLabel(year, week) {
   const d = new Date(ts);
   return `W${week} \u00b7 ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
-function msToTs(m) { return weekToTs(m.year, m.week); }
+function isTask(m) { return m.type === "task"; }
+function msToTs(m) { return isTask(m) ? weekToTs(m.startYear, m.startWeek) : weekToTs(m.year, m.week); }
+function msEndTs(m) { return isTask(m) ? weekToTs(m.endYear, m.endWeek) : msToTs(m); }
+function effortWeeks(m) { if (!isTask(m)) return 0; return Math.max(1, Math.round((msEndTs(m) - msToTs(m)) / (7 * 86400000))); }
 function sortedMs() { return [...milestones].sort((a, b) => msToTs(a) - msToTs(b)); }
 
 /* ============================================================
@@ -65,8 +68,10 @@ function sortedMs() { return [...milestones].sort((a, b) => msToTs(a) - msToTs(b
    ============================================================ */
 function msRange() {
   const s = sortedMs();
-  const minTs = s.length ? msToTs(s[0]) : Date.now();
-  const maxTs = s.length ? msToTs(s[s.length - 1]) : Date.now();
+  let minTs = s.length ? msToTs(s[0]) : Date.now();
+  let maxTs = s.length ? msToTs(s[s.length - 1]) : Date.now();
+  // extend maxTs to include task end dates
+  s.forEach(m => { const end = msEndTs(m); if (end > maxTs) maxTs = end; });
   const r = Math.max(maxTs - minTs, 86400000 * 60);
   return { min: minTs - r * 0.08, range: r * 1.16 };
 }
@@ -142,138 +147,277 @@ function render() {
   $inner.style.width = w + "px";
   $inner.style.left = panX + "px";
 
-  $inner.querySelectorAll(".time-marker, .ms").forEach(el => el.remove());
+  $inner.querySelectorAll(".time-marker, .ms, .task-bar, .goal-connector, .goal-dot").forEach(el => el.remove());
 
-  /* --- time markers --- */
+  /* === LAYOUT: calculate zones first === */
+  const visibleGoals = visible.filter(m => !isTask(m));
+  const visibleTasks = visible.filter(m => isTask(m));
+
+  /* --- Responsive layout: vh-based with clamp bounds --- */
+  const vh = window.innerHeight / 100;
+  const MIN_GAP = 20; // minimum pixels between card edges
+  const CARD_W = 230; // effective card width for collision (matches max-width + margin)
+
+  /* lane heights scale with viewport */
+  const FULL_LANE_H  = Math.min(280, Math.max(200, vh * 22));  // clamp(200, 22vh, 280)
+  const COMPACT_LANE_H = Math.min(70, Math.max(50, vh * 6));    // clamp(50, 6vh, 70)
+  const BASE_OFFSET  = Math.min(30, Math.max(18, vh * 2.5));    // clamp(18, 2.5vh, 30)
+
+  const goalItems = visibleGoals.map(ms => ({ ms, x: tsToX(msToTs(ms)) }));
+  goalItems.sort((a, b) => a.x - b.x);
+
+  // assign lanes with minimum gap enforcement
+  const goalLanes = []; // each lane stores rightmost occupied edge
+  goalItems.forEach(item => {
+    const halfW = CARD_W / 2;
+    const left = item.x - halfW;
+    const right = item.x + halfW;
+    let placed = false;
+    for (let l = 0; l < goalLanes.length; l++) {
+      if (left >= goalLanes[l] + MIN_GAP) {
+        goalLanes[l] = right;
+        item.lane = l;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      item.lane = goalLanes.length;
+      goalLanes.push(right);
+    }
+  });
+
+  // #2: lane 0 = full card, lane 1+ = compact card
+  const goalMaxLane = goalItems.length ? Math.max(...goalItems.map(i => i.lane)) : 0;
+
+  // #3: dynamic heights with responsive task bars
+  const TASK_BAR_H = Math.min(32, Math.max(24, vh * 3));   // clamp(24, 3vh, 32)
+  const TASK_BAR_GAP = Math.min(10, Math.max(4, vh * 0.8)); // clamp(4, 0.8vh, 10)
+
+  // assign task lanes
+  const taskItems = visibleTasks.map(ms => ({
+    ms, x1: tsToX(msToTs(ms)), x2: tsToX(msEndTs(ms))
+  })).sort((a, b) => a.x1 - b.x1);
+
+  const taskLanes = [];
+  taskItems.forEach(item => {
+    let placed = false;
+    for (let l = 0; l < taskLanes.length; l++) {
+      if (item.x1 >= taskLanes[l] + MIN_GAP) {
+        taskLanes[l] = item.x2;
+        item.lane = l;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      item.lane = taskLanes.length;
+      taskLanes.push(item.x2);
+    }
+  });
+
+  const taskMaxLane = taskItems.length ? Math.max(...taskItems.map(i => i.lane)) : -1;
+
+  // #3: calculate dynamic track height (responsive)
+  const minGoalZone = Math.min(250, Math.max(160, vh * 22)); // clamp(160, 22vh, 250)
+  const minTaskZone = Math.min(80, Math.max(50, vh * 6));     // clamp(50, 6vh, 80)
+  const goalZoneH = FULL_LANE_H + goalMaxLane * COMPACT_LANE_H + BASE_OFFSET + 20;
+  const taskZoneH = (taskMaxLane + 1) * (TASK_BAR_H + TASK_BAR_GAP) + 20;
+  const axisY = Math.max(goalZoneH, minGoalZone);
+  const totalTrackH = axisY + Math.max(taskZoneH, minTaskZone);
+
+  $track.style.height = totalTrackH + "px";
+  $inner.querySelector(".axis").style.top = axisY + "px";
+
+  /* --- time markers (axis down only — no crossing cards) --- */
   const r = msRange();
   const startYear = new Date(r.min).getFullYear();
   const endYear   = new Date(r.min + r.range).getFullYear();
   const showMonths = zoom >= 0.8, showWeeks = zoom >= 2.0, showQuarters = zoom >= 0.5;
+  const markerTop = axisY + 4;
+  const markerHeight = totalTrackH - markerTop;
 
   for (let y = startYear; y <= endYear + 1; y++) {
-    addMarker("year", tsToX(new Date(y, 0, 1).getTime()), `${y}`);
+    addMarker("year", tsToX(new Date(y, 0, 1).getTime()), `${y}`, markerTop, markerHeight);
     if (showMonths) for (let m = 0; m < 12; m++) {
       const mX = tsToX(new Date(y, m, 1).getTime());
-      if (mX >= -200 && mX <= w + 200) addMarker("month", mX, MONTHS[m]);
+      if (mX >= -200 && mX <= w + 200) addMarker("month", mX, MONTHS[m], markerTop, markerHeight);
     }
     if (showQuarters) for (let q = 0; q < 4; q++) {
       const qX = tsToX(new Date(y, q * 3, 1).getTime());
-      if (qX >= -200 && qX <= w + 200) addMarker("quarter", qX, `Q${q + 1}`);
+      if (qX >= -200 && qX <= w + 200) addMarker("quarter", qX, `Q${q + 1}`, markerTop, markerHeight);
     }
     if (showWeeks) for (let wk = 1; wk <= 53; wk++) {
       const wX = tsToX(weekToTs(y, wk));
-      if (wX >= -200 && wX <= w + 200) addMarker("week", wX, `W${wk}`);
+      if (wX >= -200 && wX <= w + 200) addMarker("week", wX, `W${wk}`, markerTop, markerHeight);
     }
   }
 
-  /* --- milestone cards with collision-aware staggering --- */
-  const CARD_COLLISION_W = 140;
-  const LANE_HEIGHT = 120;
-  const BASE_OFFSET = 22;
-  const CONNECTOR_BASE = 60;
-
-  const withX = visible.map(ms => ({ ms, x: tsToX(msToTs(ms)) }));
-  withX.sort((a, b) => a.x - b.x);
-
-  const aboveItems = [], belowItems = [];
-  withX.forEach((item, i) => {
-    if (i % 2 === 0) aboveItems.push(item);
-    else belowItems.push(item);
+  // calculate dot offsets for goals sharing the same axis position
+  const DOT_SPREAD_V = 18; // vertical pixels between stacked dots
+  const dotGroups = {};
+  goalItems.forEach(item => {
+    const key = Math.round(item.x);
+    if (!dotGroups[key]) dotGroups[key] = [];
+    dotGroups[key].push(item);
+  });
+  Object.values(dotGroups).forEach(group => {
+    const total = group.length;
+    if (total <= 1) { group[0].dotOffsetY = 0; return; }
+    const startOffset = -((total - 1) * DOT_SPREAD_V) / 2;
+    group.forEach((item, i) => { item.dotOffsetY = startOffset + i * DOT_SPREAD_V; });
   });
 
-  function assignLanes(items) {
-    const lanes = [];
-    items.forEach(item => {
-      const halfW = CARD_COLLISION_W / 2;
-      const left = item.x - halfW;
-      const right = item.x + halfW;
-      let placed = false;
-      for (let l = 0; l < lanes.length; l++) {
-        if (left >= lanes[l]) {
-          lanes[l] = right;
-          item.lane = l;
-          placed = true;
-          break;
-        }
-      }
-      if (!placed) {
-        item.lane = lanes.length;
-        lanes.push(right);
-      }
-    });
-  }
+  // === RENDER PASS 1: Connectors (z-index: 2 — behind everything) ===
+  goalItems.forEach(({ ms, x, lane }) => {
+    const cardOffset = BASE_OFFSET + (lane === 0 ? 0 : FULL_LANE_H + (lane - 1) * COMPACT_LANE_H);
+    const connectorH = Math.max(0, cardOffset - 10);
+    if (connectorH <= 0) return;
+    const dotColor = ms.tag ? getTagColor(ms.tag) : "#888";
 
-  assignLanes(aboveItems);
-  assignLanes(belowItems);
+    const conn = document.createElement("div");
+    conn.className = "goal-connector";
+    conn.style.position = "absolute";
+    conn.style.left = x + "px";
+    conn.style.top = (axisY - 10 - connectorH) + "px";
+    conn.style.width = "2px";
+    conn.style.height = connectorH + "px";
+    conn.style.background = "#999";
+    conn.style.transform = "translateX(-50%)";
+    conn.style.zIndex = "2";
+    conn.style.pointerEvents = "none";
+    $inner.appendChild(conn);
+  });
 
-  const allPlaced = [...aboveItems.map(i => ({...i, above: true})), ...belowItems.map(i => ({...i, above: false}))];
+  // === RENDER PASS 2: Dots (z-index: 5 — above connectors, below cards) ===
+  goalItems.forEach(({ ms, x, dotOffsetY = 0 }) => {
+    const dotColor = ms.tag ? getTagColor(ms.tag) : "#888";
+    const sc = getStatusColor(ms.status);
 
-  allPlaced.forEach(({ ms, x, above, lane }) => {
+    const dot = document.createElement("div");
+    dot.className = "goal-dot";
+    dot.style.position = "absolute";
+    dot.style.left = x + "px";
+    dot.style.top = (axisY - 8 + dotOffsetY) + "px";
+    dot.style.width = "16px";
+    dot.style.height = "16px";
+    dot.style.borderRadius = "50%";
+    dot.style.background = dotColor;
+    dot.style.border = "3px solid var(--bg)";
+    dot.style.transform = "translateX(-50%)";
+    dot.style.boxShadow = `0 0 10px ${sc}55`;
+    dot.style.zIndex = "5";
+    dot.style.pointerEvents = "none";
+    $inner.appendChild(dot);
+  });
+
+  // === RENDER PASS 3: Cards (z-index: 20 — on top of everything) ===
+  goalItems.forEach(({ ms, x, lane }) => {
     const sc = getStatusColor(ms.status);
     const sl = getStatusLabel(ms.status);
     const dotColor = ms.tag ? getTagColor(ms.tag) : "#888";
     const tc = ms.tag ? getTagColor(ms.tag) : "";
+    const compact = lane > 0;
 
-    const cardOffset = BASE_OFFSET + lane * LANE_HEIGHT;
-    const connectorH = CONNECTOR_BASE + lane * LANE_HEIGHT;
+    const cardOffset = BASE_OFFSET + (lane === 0 ? 0 : FULL_LANE_H + (lane - 1) * COMPACT_LANE_H);
 
     const el = document.createElement("div");
     el.className = "ms" + (dragId === ms.id ? " no-transition" : "");
     el.style.left = x + "px";
-    el.style.top = "280px";
+    el.style.top = axisY + "px";
     el.dataset.id = ms.id;
 
     const tagHtml = ms.tag ? `<span class="card-tag" style="color:${tc};border-color:${tc}44;"><span class="card-dot" style="background:${tc};width:6px;height:6px;display:inline-block;border-radius:50%;margin-right:3px;"></span>${ms.tag}</span>` : "";
 
-    el.innerHTML = `
-      <div class="dot-ax" style="top:-8px; background:${dotColor}; box-shadow:0 0 12px ${sc}55;"></div>
-      <div class="connector" style="${above ? "bottom:10px;" : "top:10px;"} height:${connectorH}px;"></div>
-      <div class="card" style="border-color:${dotColor}66; position:absolute; left:50%; transform:translateX(-50%); ${above ? `bottom:${cardOffset}px;` : `top:${cardOffset}px;`}">
-        <div class="card-head">
-          <span class="card-dot" style="background:${dotColor}"></span>
-          <span class="card-title">${ms.title}</span>
-        </div>
-        <p class="card-desc">${ms.desc}</p>
-        <div class="card-meta">
-          <span class="card-when">${weekLabel(ms.year, ms.week)}</span>
-          <span class="card-status" style="background:${sc}22;color:${sc};">${sl}</span>
-          ${tagHtml}
-        </div>
-        <div class="card-id">${ms.id}</div>
-        <div class="card-actions">
-          <button class="card-btn" data-action="edit" data-eid="${ms.id}">Edit</button>
-          <button class="card-btn del" data-action="del" data-eid="${ms.id}">Delete</button>
-        </div>
-      </div>`;
+    if (compact) {
+      el.innerHTML = `
+        <div class="card card-compact" style="border-color:${dotColor}44; position:absolute; left:50%; transform:translateX(-50%); bottom:${cardOffset}px;">
+          <div class="card-head">
+            <span class="card-dot" style="background:${dotColor}"></span>
+            <span class="card-title">${ms.title}</span>
+          </div>
+          <div class="card-detail">
+            <p class="card-desc">${ms.desc}</p>
+            <div class="card-meta">
+              <span class="card-when">${weekLabel(ms.year, ms.week)}</span>
+              <span class="card-status" style="background:${sc}22;color:${sc};">${sl}</span>
+              ${tagHtml}
+            </div>
+            <div class="card-id">${ms.id}</div>
+            <div class="card-actions">
+              <button class="card-btn" data-action="edit" data-eid="${ms.id}">Edit</button>
+              <button class="card-btn del" data-action="del" data-eid="${ms.id}">Delete</button>
+            </div>
+          </div>
+        </div>`;
+    } else {
+      el.innerHTML = `
+        <div class="card" style="border-color:${dotColor}66; position:absolute; left:50%; transform:translateX(-50%); bottom:${cardOffset}px;">
+          <div class="card-head">
+            <span class="card-dot" style="background:${dotColor}"></span>
+            <span class="card-title">${ms.title}</span>
+          </div>
+          <p class="card-desc">${ms.desc}</p>
+          <div class="card-meta">
+            <span class="card-when">${weekLabel(ms.year, ms.week)}</span>
+            <span class="card-status" style="background:${sc}22;color:${sc};">${sl}</span>
+            ${tagHtml}
+          </div>
+          <div class="card-id">${ms.id}</div>
+          <div class="card-actions">
+            <button class="card-btn" data-action="edit" data-eid="${ms.id}">Edit</button>
+            <button class="card-btn del" data-action="del" data-eid="${ms.id}">Delete</button>
+          </div>
+        </div>`;
+    }
 
     el.addEventListener("mousedown", e => {
       if (e.target.closest(".card-btn")) return;
       e.stopPropagation();
       dragId = ms.id;
+      dragIsTask = false;
+      dragMoved = false;
       $track.classList.add("dragging");
     });
 
     $inner.appendChild(el);
   });
 
-  /* --- flip cards to horizontal if they overflow the track --- */
-  requestAnimationFrame(() => {
-    $inner.querySelectorAll(".ms").forEach(msEl => {
-      const card = msEl.querySelector(".card");
-      if (!card) return;
-      const cardRect = card.getBoundingClientRect();
-      const trackRect = $track.getBoundingClientRect();
-      const cardTop = cardRect.top - trackRect.top;
-      const cardBot = cardRect.bottom - trackRect.top;
-      if (cardTop < 0 || cardBot > 560) {
-        card.classList.add("card-hz");
-      }
+  /* --- Task bars: all below the axis --- */
+  taskItems.forEach(({ ms, x1, x2, lane }) => {
+    const barW = Math.max(40, x2 - x1);
+    const tc = ms.tag ? getTagColor(ms.tag) : "#888";
+    const sc = getStatusColor(ms.status);
+    const sl = getStatusLabel(ms.status);
+    const effort = effortWeeks(ms);
+    const yOffset = Math.round(TASK_BAR_GAP * 2) + lane * (TASK_BAR_H + TASK_BAR_GAP);
+
+    const bar = document.createElement("div");
+    bar.className = "task-bar";
+    bar.style.left = x1 + "px";
+    bar.style.width = barW + "px";
+    bar.style.top = (axisY + yOffset) + "px";
+    bar.style.background = `linear-gradient(135deg, ${tc}cc, ${tc}88)`;
+    bar.dataset.id = ms.id;
+
+    bar.innerHTML = `<span class="task-title">${ms.title}</span><span class="task-status" style="color:${sc};">${sl}</span><span class="task-effort">Effort: ${effort}w</span>`;
+
+    bar.addEventListener("mousedown", e => {
+      e.stopPropagation();
+      dragId = ms.id;
+      dragIsTask = true;
+      dragDurationWeeks = effortWeeks(ms);
+      dragMoved = false;
+      $track.classList.add("dragging");
     });
+    bar.addEventListener("click", e => { if (!dragMoved) openModal("edit", ms); });
+
+    $inner.appendChild(bar);
   });
 
-  /* --- bottom list grouped by quarter --- */
+  /* --- bottom list grouped by quarter, sub-grouped by week --- */
   const totalVisible = visible.length;
-  $msCount.textContent = `${totalVisible} milestone${totalVisible !== 1 ? "s" : ""} shown (${milestones.length} total)`;
+  $msCount.textContent = `${totalVisible} item${totalVisible !== 1 ? "s" : ""} shown (${milestones.length} total)`;
   $msList.innerHTML = "";
 
   const groups = {};
@@ -293,32 +437,72 @@ function render() {
     header.innerHTML = `<span>Q${g.q} ${g.year}</span><span class="q-count">${g.items.length}</span>`;
     grp.appendChild(header);
 
-    const items = document.createElement("div"); items.className = "q-group-items";
+    // sub-group by week
+    const weekGroups = {};
     g.items.forEach(ms => {
-      const sc = getStatusColor(ms.status);
-      const sl = getStatusLabel(ms.status);
-      const tc = ms.tag ? getTagColor(ms.tag) : "";
-      const tagHtml = ms.tag ? `<span class="chip-tag" style="color:${tc};border-color:${tc}44;">${ms.tag}</span>` : "";
-      const chipDotColor = ms.tag ? getTagColor(ms.tag) : "#888";
-      const chip = document.createElement("div"); chip.className = "ms-chip";
-      chip.innerHTML = `<span class="chip-dot" style="background:${chipDotColor}"></span>
-        <span>${ms.title}</span>
-        <span class="chip-when">${weekLabel(ms.year, ms.week)}</span>
-        <span class="chip-status" style="color:${sc};">${sl}</span>
-        ${tagHtml}
-        <span class="chip-id">${ms.id}</span>`;
-      chip.onclick = () => openModal("edit", ms);
-      items.appendChild(chip);
+      const wkNum = isTask(ms) ? ms.startWeek : ms.week;
+      const wkYear = isTask(ms) ? ms.startYear : ms.year;
+      const wk = `${wkYear}-W${String(wkNum).padStart(2, "0")}`;
+      if (!weekGroups[wk]) weekGroups[wk] = { ms: [], label: isTask(ms) ? weekLabel(ms.startYear, ms.startWeek) : weekLabel(ms.year, ms.week) };
+      weekGroups[wk].ms.push(ms);
     });
-    grp.appendChild(items);
+
+    let prevMonth = -1;
+    Object.keys(weekGroups).sort().forEach(wk => {
+      const wg = weekGroups[wk];
+
+      // determine month of this week group
+      const firstMs = wg.ms[0];
+      const wkTs = msToTs(firstMs);
+      const wkMonth = new Date(wkTs).getMonth();
+
+      const weekRow = document.createElement("div"); weekRow.className = "week-row";
+      if (prevMonth >= 0 && wkMonth !== prevMonth) {
+        weekRow.classList.add("month-divider");
+      }
+      prevMonth = wkMonth;
+
+      const weekLabel_ = document.createElement("span"); weekLabel_.className = "week-label";
+      weekLabel_.textContent = wg.label;
+      weekRow.appendChild(weekLabel_);
+
+      const chipsWrap = document.createElement("div"); chipsWrap.className = "week-chips";
+      wg.ms.forEach(ms => {
+        const sc = getStatusColor(ms.status);
+        const sl = getStatusLabel(ms.status);
+        const tc = ms.tag ? getTagColor(ms.tag) : "";
+        const tagHtml = ms.tag ? `<span class="chip-tag" style="color:${tc};border-color:${tc}44;">${ms.tag}</span>` : "";
+        const chipDotColor = ms.tag ? getTagColor(ms.tag) : "#888";
+        const chip = document.createElement("div"); chip.className = "ms-chip" + (isTask(ms) ? " ms-chip-task" : "");
+        const whenHtml = isTask(ms)
+          ? `<span class="chip-when">${weekLabel(ms.startYear, ms.startWeek)} → ${weekLabel(ms.endYear, ms.endWeek)}</span><span class="chip-status" style="color:var(--accent);font-size:8px;">Effort: ${effortWeeks(ms)}w</span>`
+          : `<span class="chip-when">${weekLabel(ms.year, ms.week)}</span>`;
+        const typeLabel = isTask(ms) ? `<span class="chip-tag" style="color:#888;border-color:#333;">Task</span>` : "";
+        chip.innerHTML = `<span class="chip-dot" style="background:${chipDotColor}"></span>
+          <span>${ms.title}</span>
+          ${whenHtml}
+          <span class="chip-status" style="color:${sc};">${sl}</span>
+          ${tagHtml}
+          ${typeLabel}
+          <span class="chip-id">${ms.id}</span>`;
+        chip.onclick = () => openModal("edit", ms);
+        chipsWrap.appendChild(chip);
+      });
+
+      weekRow.appendChild(chipsWrap);
+      grp.appendChild(weekRow);
+    });
+
     $msList.appendChild(grp);
   });
 }
 
-function addMarker(type, x, label, extraLabel) {
+function addMarker(type, x, label, markerTop, markerHeight, extraLabel) {
   const mk = document.createElement("div");
   mk.className = "time-marker " + type;
   mk.style.left = x + "px";
+  mk.style.top = markerTop + "px";
+  mk.style.height = markerHeight + "px";
   let html = `<div class="line"></div><span class="label">${label}</span>`;
   if (extraLabel) html += `<span class="label" style="bottom:44px;font-size:9px;color:#888;font-weight:400;">${extraLabel}</span>`;
   mk.innerHTML = html;
@@ -349,18 +533,33 @@ $track.addEventListener("mousedown", e => {
 window.addEventListener("mousemove", e => {
   if (isPanning) { panX = panStartVal + (e.clientX - panStartX); render(); }
   if (dragId !== null) {
+    dragMoved = true;
     const rect = $track.getBoundingClientRect();
     const localX = e.clientX - rect.left - panX;
     const ts = xToTs(localX);
     const { year, week } = tsToWeek(ts);
     const ms = milestones.find(v => v.id === dragId);
-    if (ms) { ms.year = year; ms.week = Math.max(1, Math.min(53, week)); render(); }
+    if (ms) {
+      if (isTask(ms)) {
+        // shift both start and end, preserving duration
+        ms.startYear = year;
+        ms.startWeek = Math.max(1, Math.min(53, week));
+        const endTs = weekToTs(year, ms.startWeek) + dragDurationWeeks * 7 * 86400000;
+        const end = tsToWeek(endTs);
+        ms.endYear = end.year;
+        ms.endWeek = end.week;
+      } else {
+        ms.year = year;
+        ms.week = Math.max(1, Math.min(53, week));
+      }
+      render();
+    }
   }
 });
 
 window.addEventListener("mouseup", () => {
   if (dragId !== null) autoSave();
-  isPanning = false; dragId = null;
+  isPanning = false; dragId = null; dragIsTask = false; dragDurationWeeks = 0;
   $track.classList.remove("panning", "dragging");
 });
 
@@ -394,7 +593,7 @@ document.getElementById("clearAll").onclick = () => {
 
 /* double-click on timeline to add */
 $track.addEventListener("dblclick", e => {
-  if (e.target.closest(".ms")) return;
+  if (e.target.closest(".ms") || e.target.closest(".task-bar")) return;
   const rect = $track.getBoundingClientRect();
   const localX = e.clientX - rect.left - panX;
   const ts = xToTs(localX);
@@ -406,7 +605,7 @@ $track.addEventListener("dblclick", e => {
    MILESTONE MODAL
    ============================================================ */
 const $modalBg = document.getElementById("modalBg");
-let modalMode = "add", modalMs = null, modalStatus = "undefined", modalPeriod = "early";
+let modalMode = "add", modalMs = null, modalStatus = "undefined", modalPeriod = "early", modalEndPeriod = "mid", modalType = "goal";
 const PERIODS = [
   { key: "early", label: "Early", dayOffset: 3 },
   { key: "mid",   label: "Mid",   dayOffset: 14 },
@@ -426,8 +625,20 @@ function openModal(mode, ms, presetYear, presetWeek) {
   }
   modalStatus = ms ? ms.status : "undefined";
 
+  // type toggle
+  modalType = (ms && isTask(ms)) ? "task" : "goal";
+  document.querySelectorAll('input[name="fType"]').forEach(r => {
+    r.checked = (r.value === modalType);
+    r.onchange = () => { modalType = r.value; toggleTypeUI(); updateAllPreviews(); };
+  });
+
+  // start date
   let initYear, initMonth;
-  if (ms) {
+  if (ms && isTask(ms)) {
+    const d = new Date(weekToTs(ms.startYear, ms.startWeek));
+    initYear = d.getFullYear(); initMonth = d.getMonth();
+    modalPeriod = d.getDate() <= 10 ? "early" : d.getDate() <= 20 ? "mid" : "late";
+  } else if (ms) {
     const d = new Date(weekToTs(ms.year, ms.week));
     initYear = d.getFullYear(); initMonth = d.getMonth();
     modalPeriod = d.getDate() <= 10 ? "early" : d.getDate() <= 20 ? "mid" : "late";
@@ -455,17 +666,63 @@ function openModal(mode, ms, presetYear, presetWeek) {
     $month.appendChild(opt);
   });
 
-  renderPeriodPicks();
-  updateWeekPreview();
-  $year.onchange = updateWeekPreview;
-  $month.onchange = updateWeekPreview;
+  // end date
+  let endInitYear, endInitMonth;
+  if (ms && isTask(ms)) {
+    const d = new Date(weekToTs(ms.endYear, ms.endWeek));
+    endInitYear = d.getFullYear(); endInitMonth = d.getMonth();
+    modalEndPeriod = d.getDate() <= 10 ? "early" : d.getDate() <= 20 ? "mid" : "late";
+  } else {
+    endInitYear = initYear; endInitMonth = Math.min(11, initMonth + 2);
+    modalEndPeriod = "mid";
+  }
 
-  function updateWeekPreview() {
+  const $endYear = document.getElementById("fEndYear"); $endYear.innerHTML = "";
+  for (let y = curYear - 2; y <= curYear + 5; y++) {
+    const opt = document.createElement("option"); opt.value = y; opt.textContent = y;
+    if (y === endInitYear) opt.selected = true;
+    $endYear.appendChild(opt);
+  }
+  const $endMonth = document.getElementById("fEndMonth"); $endMonth.innerHTML = "";
+  MONTHS.forEach((m, i) => {
+    const opt = document.createElement("option"); opt.value = i; opt.textContent = m;
+    if (i === endInitMonth) opt.selected = true;
+    $endMonth.appendChild(opt);
+  });
+
+  renderPeriodPicks();
+  renderEndPeriodPicks();
+  toggleTypeUI();
+  updateAllPreviews();
+  $year.onchange = updateAllPreviews;
+  $month.onchange = updateAllPreviews;
+  $endYear.onchange = updateAllPreviews;
+  $endMonth.onchange = updateAllPreviews;
+
+  function toggleTypeUI() {
+    const isT = modalType === "task";
+    document.getElementById("dateLabelStart").style.display = isT ? "block" : "none";
+    document.getElementById("endDateSection").style.display = isT ? "block" : "none";
+  }
+
+  function updateAllPreviews() {
     const resolved = resolveToWeek();
     const wkStart = new Date(weekToTs(resolved.year, resolved.week));
     const wkEnd = new Date(wkStart.getTime() + 6 * 86400000);
     document.getElementById("weekPreview").textContent =
       `\u2192 W${resolved.week} ${resolved.year}  (${fmtPreviewDate(wkStart)} \u2013 ${fmtPreviewDate(wkEnd)})`;
+
+    if (modalType === "task") {
+      const resolvedEnd = resolveEndToWeek();
+      const ewkStart = new Date(weekToTs(resolvedEnd.year, resolvedEnd.week));
+      const ewkEnd = new Date(ewkStart.getTime() + 6 * 86400000);
+      document.getElementById("endWeekPreview").textContent =
+        `\u2192 W${resolvedEnd.week} ${resolvedEnd.year}  (${fmtPreviewDate(ewkStart)} \u2013 ${fmtPreviewDate(ewkEnd)})`;
+      const startTs = weekToTs(resolved.year, resolved.week);
+      const endTs = weekToTs(resolvedEnd.year, resolvedEnd.week);
+      const weeks = Math.max(1, Math.round((endTs - startTs) / (7 * 86400000)));
+      document.getElementById("effortPreview").textContent = weeks > 0 ? `Effort: ${weeks} week${weeks > 1 ? "s" : ""}` : "End must be after start";
+    }
   }
 
   function renderPeriodPicks() {
@@ -474,7 +731,18 @@ function openModal(mode, ms, presetYear, presetWeek) {
       const el = document.createElement("div");
       el.className = "period-pick" + (p.key === modalPeriod ? " active" : "");
       el.textContent = p.label;
-      el.onclick = () => { modalPeriod = p.key; renderPeriodPicks(); updateWeekPreview(); };
+      el.onclick = () => { modalPeriod = p.key; renderPeriodPicks(); updateAllPreviews(); };
+      c.appendChild(el);
+    });
+  }
+
+  function renderEndPeriodPicks() {
+    const c = document.getElementById("fEndPeriod"); c.innerHTML = "";
+    PERIODS.forEach(p => {
+      const el = document.createElement("div");
+      el.className = "period-pick" + (p.key === modalEndPeriod ? " active" : "");
+      el.textContent = p.label;
+      el.onclick = () => { modalEndPeriod = p.key; renderEndPeriodPicks(); updateAllPreviews(); };
       c.appendChild(el);
     });
   }
@@ -487,7 +755,16 @@ function openModal(mode, ms, presetYear, presetWeek) {
     return tsToWeek(target.getTime());
   }
 
+  function resolveEndToWeek() {
+    const y = parseInt($endYear.value);
+    const m = parseInt($endMonth.value);
+    const dayOff = PERIODS.find(p => p.key === modalEndPeriod).dayOffset;
+    const target = new Date(y, m, dayOff);
+    return tsToWeek(target.getTime());
+  }
+
   $modalBg._resolveToWeek = resolveToWeek;
+  $modalBg._resolveEndToWeek = resolveEndToWeek;
 
   const $tag = document.getElementById("fTag"); $tag.innerHTML = "";
   const noneOpt = document.createElement("option"); noneOpt.value = ""; noneOpt.textContent = "\u2014 No tag \u2014"; $tag.appendChild(noneOpt);
@@ -554,10 +831,27 @@ function saveModal() {
 
   const { year, week } = $modalBg._resolveToWeek();
 
-  if (modalMode === "add") {
-    milestones.push({ id: generateId(), year, week, title, desc, status: modalStatus, tag });
-  } else if (modalMs) {
-    Object.assign(modalMs, { title, desc, year, week, status: modalStatus, tag });
+  if (modalType === "task") {
+    const end = $modalBg._resolveEndToWeek();
+    const data = { type: "task", title, desc, startYear: year, startWeek: week, endYear: end.year, endWeek: end.week, status: modalStatus, tag };
+    if (modalMode === "add") {
+      data.id = generateId();
+      milestones.push(data);
+    } else if (modalMs) {
+      // remove goal fields if switching from goal to task
+      delete modalMs.year; delete modalMs.week;
+      Object.assign(modalMs, data);
+    }
+  } else {
+    const data = { type: "goal", title, desc, year, week, status: modalStatus, tag };
+    if (modalMode === "add") {
+      data.id = generateId();
+      milestones.push(data);
+    } else if (modalMs) {
+      // remove task fields if switching from task to goal
+      delete modalMs.startYear; delete modalMs.startWeek; delete modalMs.endYear; delete modalMs.endWeek;
+      Object.assign(modalMs, data);
+    }
   }
   if (tag && !visibleTags.has(tag)) visibleTags.add(tag);
   autoSave();
@@ -743,6 +1037,20 @@ MONTHS.forEach((m, i) => {
   full.forEach((f, j) => { MONTH_MAP[f] = j; });
 });
 
+function parseDate(dateStr) {
+  let month = -1, year = -1;
+  const mMatch = dateStr.match(/^([a-z]+)\s+(\d{4})$/i);
+  if (mMatch) { const mi = MONTH_MAP[mMatch[1].toLowerCase()]; if (mi !== undefined) { month = mi; year = parseInt(mMatch[2]); } }
+  if (month < 0) { const m = dateStr.match(/^(\d{4})-(\d{1,2})$/); if (m) { year = parseInt(m[1]); month = parseInt(m[2]) - 1; } }
+  if (month < 0) { const m = dateStr.match(/^(\d{1,2})\/(\d{4})$/); if (m) { month = parseInt(m[1]) - 1; year = parseInt(m[2]); } }
+  if (month < 0) { const m = dateStr.match(/^(\d{2})(\d{4})$/); if (m) { month = parseInt(m[1]) - 1; year = parseInt(m[2]); } }
+  if (month >= 0 && month <= 11 && year >= 0) return { month, year };
+  return null;
+}
+
+const periodMap = { early: 3, mid: 14, late: 24, e: 3, m: 14, l: 24 };
+const periodLabels = { early: "Early", mid: "Mid", late: "Late", e: "Early", m: "Mid", l: "Late" };
+
 function parseBatchLines(text) {
   const lines = text.split("\n").map(l => l.trim()).filter(l => l && !l.startsWith("#"));
   const results = [];
@@ -757,53 +1065,77 @@ function parseBatchLines(text) {
     const title = parts[0];
     if (!title) { results.push({ error: `Line ${lineIdx + 1}: title is empty`, line }); return; }
 
-    const dateStr = parts[1];
-    let month = -1, year = -1;
+    // check for duration syntax: "date + Nw"
+    const dateField = parts[1];
+    const durationMatch = dateField.match(/^(.+?)\s*\+\s*(\d+)w$/i);
 
-    const mMatch = dateStr.match(/^([a-z]+)\s+(\d{4})$/i);
-    if (mMatch) {
-      const mi = MONTH_MAP[mMatch[1].toLowerCase()];
-      if (mi !== undefined) { month = mi; year = parseInt(mMatch[2]); }
+    if (durationMatch) {
+      // TASK with duration: title, date + Nw, e/m/l, tag, status
+      const startDate = parseDate(durationMatch[1].trim());
+      if (!startDate) { results.push({ error: `Line ${lineIdx + 1}: can't parse date "${durationMatch[1].trim()}"`, line }); return; }
+      const durationWeeks = parseInt(durationMatch[2]);
+
+      const pStr = (parts[2] || "mid").toLowerCase().trim();
+      const tag = parts[3] || "";
+      const statusStr = (parts[4] || "undefined").toLowerCase().replace(/\s+/g, "");
+      let statusKey = "undefined";
+      const found = statuses.find(s => s.key === statusStr || s.label.toLowerCase().replace(/\s+/g, "") === statusStr);
+      if (found) statusKey = found.key;
+
+      const startTarget = new Date(startDate.year, startDate.month, periodMap[pStr] || 14);
+      const resolvedStart = tsToWeek(startTarget.getTime());
+      const endTs = startTarget.getTime() + durationWeeks * 7 * 86400000;
+      const resolvedEnd = tsToWeek(endTs);
+
+      results.push({
+        ok: true, isTask: true,
+        milestone: { type: "task", title, desc: "", startYear: resolvedStart.year, startWeek: resolvedStart.week, endYear: resolvedEnd.year, endWeek: resolvedEnd.week, status: statusKey, tag },
+        display: { title, startPeriod: periodLabels[pStr] || "Mid", startMonth: MONTHS[startDate.month], startYear: startDate.year, effort: durationWeeks, tag, status: getStatusLabel(statusKey) }
+      });
+
+    } else {
+      const startDate = parseDate(dateField);
+      if (!startDate) { results.push({ error: `Line ${lineIdx + 1}: can't parse date "${dateField}"`, line }); return; }
+
+      const pStr = (parts[2] || "mid").toLowerCase().trim();
+      const tag = parts[3] || "";
+      const statusStr = (parts[4] || "undefined").toLowerCase().replace(/\s+/g, "");
+      let statusKey = "undefined";
+      const found = statuses.find(s => s.key === statusStr || s.label.toLowerCase().replace(/\s+/g, "") === statusStr);
+      if (found) statusKey = found.key;
+
+      // check for end date: field 5 is a date, field 6 is end period
+      const possibleEndDate = parts.length >= 6 ? parseDate(parts[5]) : null;
+
+      if (possibleEndDate) {
+        // TASK with end date: title, date, e/m/l, tag, status, end_date, e/m/l
+        const endPStr = (parts[6] || "mid").toLowerCase().trim();
+
+        const startTarget = new Date(startDate.year, startDate.month, periodMap[pStr] || 14);
+        const endTarget = new Date(possibleEndDate.year, possibleEndDate.month, periodMap[endPStr] || 14);
+        const resolvedStart = tsToWeek(startTarget.getTime());
+        const resolvedEnd = tsToWeek(endTarget.getTime());
+        const weeks = Math.max(1, Math.round((endTarget.getTime() - startTarget.getTime()) / (7 * 86400000)));
+
+        results.push({
+          ok: true, isTask: true,
+          milestone: { type: "task", title, desc: "", startYear: resolvedStart.year, startWeek: resolvedStart.week, endYear: resolvedEnd.year, endWeek: resolvedEnd.week, status: statusKey, tag },
+          display: { title, startPeriod: periodLabels[pStr] || "Mid", startMonth: MONTHS[startDate.month], startYear: startDate.year, endPeriod: periodLabels[endPStr] || "Mid", endMonth: MONTHS[possibleEndDate.month], endYear: possibleEndDate.year, effort: weeks, tag, status: getStatusLabel(statusKey) }
+        });
+
+      } else {
+        // GOAL: title, date, e/m/l, tag, status
+        const dayOffset = periodMap[pStr] || 14;
+        const target = new Date(startDate.year, startDate.month, dayOffset);
+        const resolved = tsToWeek(target.getTime());
+
+        results.push({
+          ok: true, isTask: false,
+          milestone: { type: "goal", title, desc: "", year: resolved.year, week: resolved.week, status: statusKey, tag },
+          display: { title, period: periodLabels[pStr] || "Mid", month: MONTHS[startDate.month], year: startDate.year, tag, status: getStatusLabel(statusKey) }
+        });
+      }
     }
-    if (month < 0) {
-      const isoMatch = dateStr.match(/^(\d{4})-(\d{1,2})$/);
-      if (isoMatch) { year = parseInt(isoMatch[1]); month = parseInt(isoMatch[2]) - 1; }
-    }
-    if (month < 0) {
-      const slashMatch = dateStr.match(/^(\d{1,2})\/(\d{4})$/);
-      if (slashMatch) { month = parseInt(slashMatch[1]) - 1; year = parseInt(slashMatch[2]); }
-    }
-    if (month < 0) {
-      const compactMatch = dateStr.match(/^(\d{2})(\d{4})$/);
-      if (compactMatch) { month = parseInt(compactMatch[1]) - 1; year = parseInt(compactMatch[2]); }
-    }
-
-    if (month < 0 || month > 11 || year < 0) {
-      results.push({ error: `Line ${lineIdx + 1}: can't parse date "${dateStr}"`, line });
-      return;
-    }
-
-    const periodStr = (parts[2] || "mid").toLowerCase().trim();
-    const periodMap = { early: 3, mid: 14, late: 24, e: 3, m: 14, l: 24 };
-    const periodLabels = { early: "Early", mid: "Mid", late: "Late", e: "Early", m: "Mid", l: "Late" };
-    const dayOffset = periodMap[periodStr] || 14;
-    const periodLabel = periodLabels[periodStr] || "Mid";
-
-    const tag = parts[3] || "";
-
-    const statusStr = (parts[4] || "undefined").toLowerCase().replace(/\s+/g, "");
-    let statusKey = "undefined";
-    const found = statuses.find(s => s.key === statusStr || s.label.toLowerCase().replace(/\s+/g, "") === statusStr);
-    if (found) statusKey = found.key;
-
-    const target = new Date(year, month, dayOffset);
-    const resolved = tsToWeek(target.getTime());
-
-    results.push({
-      ok: true,
-      milestone: { title, desc: "", year: resolved.year, week: resolved.week, status: statusKey, tag },
-      display: { title, month: MONTHS[month], year, period: periodLabel, tag, status: getStatusLabel(statusKey) }
-    });
   });
 
   return results;
@@ -823,8 +1155,20 @@ $batchInput.addEventListener("input", () => {
       const sc = getStatusColor(r.milestone.status);
       const tc = d.tag ? getTagColor(d.tag) : "";
       html += `<div style="padding:2px 0;display:flex;gap:8px;align-items:center;">`;
-      html += `<span style="color:#eee;">${d.title}</span>`;
-      html += `<span style="color:#666;">${d.period} ${d.month} ${d.year}</span>`;
+      if (r.isTask) {
+        html += `<span style="color:#888;font-size:9px;">TASK</span>`;
+        html += `<span style="color:#eee;">${d.title}</span>`;
+        if (d.endMonth) {
+          html += `<span style="color:#666;">${d.startPeriod} ${d.startMonth} ${d.startYear} → ${d.endPeriod} ${d.endMonth} ${d.endYear}</span>`;
+        } else {
+          html += `<span style="color:#666;">${d.startPeriod} ${d.startMonth} ${d.startYear}</span>`;
+        }
+        html += `<span style="color:var(--accent);font-size:9px;">Effort: ${d.effort}w</span>`;
+      } else {
+        html += `<span style="color:#888;font-size:9px;">GOAL</span>`;
+        html += `<span style="color:#eee;">${d.title}</span>`;
+        html += `<span style="color:#666;">${d.period} ${d.month} ${d.year}</span>`;
+      }
       if (d.tag) html += `<span style="color:${tc};">${d.tag}</span>`;
       html += `<span style="color:${sc};text-transform:uppercase;font-size:9px;font-weight:700;">${d.status}</span>`;
       html += `</div>`;
@@ -956,3 +1300,10 @@ if (loaded) {
 }
 renderFilters();
 render();
+
+/* re-render on resize for responsive layout */
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(render, 150);
+});

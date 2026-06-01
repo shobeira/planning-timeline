@@ -62,45 +62,36 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-body);
 
 /* ---------- track ---------- */
 .track-wrap {
-  overflow: hidden; position: relative; height: 560px;
+  overflow: hidden; position: relative; min-height: clamp(250px, 45vh, 600px);
   border-top: 1px solid #222; border-bottom: 1px solid #222;
   background: linear-gradient(180deg, #161616, var(--bg) 50%, #161616);
   cursor: grab; user-select: none;
 }
 .track-wrap.panning { cursor: grabbing; }
 .track-wrap.dragging { cursor: ew-resize; }
-.track-inner { position: absolute; top: 0; height: 100%; }
+.track-inner { position: absolute; top: 0; height: 100%; isolation: isolate; }
 
-.time-marker { position: absolute; top: 0; height: 100%; pointer-events: none; }
-.time-marker .line { position: absolute; top: 0; height: 100%; }
-.time-marker .label { position: absolute; left: 6px; font-family: var(--font-mono); white-space: nowrap; }
-.time-marker.year .line     { width: 3px; background: #444; }
+.time-marker { position: absolute; pointer-events: none; z-index: 1; }
+.time-marker .line { position: absolute; top: 0; height: 100%; z-index: 1; }
+.time-marker .label { position: absolute; left: 6px; font-family: var(--font-mono); white-space: nowrap; z-index: 1; }
+.time-marker.year .line     { width: 3px; background: #333; }
 .time-marker.year .label    { bottom: 12px; font-size: 12px; color: #E0C097; font-weight: 700; }
-.time-marker.quarter .line  { width: 2px; background: #333; }
+.time-marker.quarter .line  { width: 2px; background: #282828; }
 .time-marker.quarter .label { bottom: 28px; font-size: 10px; color: #999; font-weight: 700; }
-.time-marker.month .line    { width: 1px; background: #2a2a2a; }
+.time-marker.month .line    { width: 1px; background: #222; }
 .time-marker.month .label   { bottom: 44px; font-size: 9px; color: #888; }
-.time-marker.week .line     { width: 1px; background: #1e1e1e; }
+.time-marker.week .line     { width: 1px; background: #1a1a1a; }
 .time-marker.week .label    { bottom: 58px; font-size: 8px; color: #777; }
 
 .axis {
-  position: absolute; top: 280px; left: 0; right: 0; height: 2px;
+  position: absolute; left: 0; right: 0; height: 2px;
   background: linear-gradient(90deg, transparent, var(--axis) 5%, var(--axis) 95%, transparent);
 }
 
 /* ---------- milestone card ---------- */
-.ms { position: absolute; transform: translateX(-50%); transition: left 0.3s ease; z-index: 10; }
+.ms { position: absolute; transform: translateX(-50%); transition: left 0.3s ease; z-index: 20; }
 .ms.no-transition { transition: none; }
-.ms:hover { z-index: 30; }
-.ms .connector {
-  position: absolute; left: 50%; width: 2px; transform: translateX(-50%);
-  background: #333; pointer-events: none;
-}
-.ms .dot-ax {
-  position: absolute; left: 50%; width: 16px; height: 16px; border-radius: 50%;
-  border: 3px solid var(--bg); transform: translateX(-50%); transition: box-shadow 0.2s;
-  z-index: 5;
-}
+.ms:hover { z-index: 40; }
 
 .ms .card {
   background: var(--surface); border: 2px solid var(--border); border-radius: 10px;
@@ -149,25 +140,53 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-body);
 .ms .card.card-hz .card-id { margin-top: 2px; }
 .ms .card.card-hz .card-actions { margin-top: 4px; }
 
+/* compact card — shown for colliding goals in upper lanes */
+.ms .card.card-compact {
+  padding: 6px 12px; min-width: 100px; max-width: 180px;
+}
+.ms .card.card-compact .card-head { margin-bottom: 0; }
+.ms .card.card-compact .card-title { font-size: 11px; }
+.ms .card.card-compact .card-detail {
+  display: none; position: absolute; left: 0; top: 100%; margin-top: 4px;
+  background: var(--surface-hi); border: 1px solid #444; border-radius: 8px;
+  padding: 10px 14px; min-width: 200px; z-index: 50;
+  box-shadow: 0 8px 24px #000a;
+}
+.ms:hover .card.card-compact .card-detail { display: block; }
+
 /* ---------- bottom list ---------- */
 .ms-list { padding: 24px 32px; }
 .ms-list h3 { font-size: 14px; color: #887e72; font-family: var(--font-mono); font-weight: 400; margin-bottom: 12px; }
 .ms-list-items { display: flex; flex-direction: column; gap: 0; }
 .q-group { margin-bottom: 16px; }
 .q-group-header {
-  font-size: 12px; font-family: var(--font-mono); color: #555;
-  text-transform: uppercase; letter-spacing: 1px; padding-bottom: 8px;
-  border-bottom: 1px solid #1e1e1e; margin-bottom: 8px;
+  font-size: 12px; font-family: var(--font-mono); color: #E0C097; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 1px; padding: 12px 0 8px;
+  border-top: 3px solid #333; margin-bottom: 8px;
   display: flex; align-items: center; gap: 10px;
 }
-.q-group-header .q-count { font-size: 10px; color: #444; background: #1a1a1a; padding: 1px 7px; border-radius: 4px; }
+.q-group-header .q-count { font-size: 10px; color: #999; background: #252525; padding: 2px 8px; border-radius: 4px; font-weight: 700; }
 .q-group-items { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* week sub-group rows */
+.week-row {
+  display: flex; align-items: flex-start; gap: 12px; padding: 6px 0;
+}
+.week-row.month-divider {
+  border-top: 1px solid #333; margin-top: 4px; padding-top: 10px;
+}
+.week-label {
+  font-size: 10px; font-family: var(--font-mono); color: #555;
+  min-width: 120px; padding-top: 10px; white-space: nowrap; flex-shrink: 0;
+}
+.week-chips { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
 .ms-chip {
   display: flex; align-items: center; gap: 8px; padding: 8px 14px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
   cursor: pointer; transition: border-color 0.2s; font-size: 13px; color: #ccc;
 }
 .ms-chip:hover { border-color: var(--accent); }
+.ms-chip-task { background: #1c2633; border-color: #2d4a5e; }
 .ms-chip .chip-dot { width: 8px; height: 8px; border-radius: 50%; }
 .ms-chip .chip-when { font-size: 10px; font-family: var(--font-mono); color: #666; }
 .ms-chip .chip-status { font-size: 9px; font-family: var(--font-mono); font-weight: 700; text-transform: uppercase; }
@@ -227,3 +246,58 @@ body { background: var(--bg); color: var(--text); font-family: var(--font-body);
 .tag-row .btn { padding: 3px 8px; font-size: 10px; }
 .tag-add-row { display: flex; gap: 8px; }
 .tag-add-row input { flex: 1; }
+
+/* ---------- help popover ---------- */
+.help-wrap { position: relative; }
+.help-popover {
+  display: none; position: absolute; top: 40px; right: 0; z-index: 500;
+  background: #1a1a1a; border: 1px solid #444; border-radius: 12px;
+  padding: 20px 24px; width: 380px; max-width: 90vw;
+  box-shadow: 0 12px 40px #000a; font-size: 12px; line-height: 1.6;
+}
+.help-wrap:hover .help-popover { display: block; }
+.help-popover h3 { font-size: 15px; margin-bottom: 10px; color: var(--accent); }
+.help-popover p { margin-bottom: 10px; color: #bbb; }
+.help-popover strong { color: #eee; }
+.help-popover em { color: #888; font-style: italic; }
+.help-popover code {
+  font-family: var(--font-mono); font-size: 10px; background: #222;
+  padding: 1px 5px; border-radius: 3px; color: #aaa;
+}
+
+/* ---------- type toggle ---------- */
+.type-toggle {
+  display: flex; gap: 12px; margin-bottom: 4px;
+}
+.type-opt {
+  display: flex; align-items: center; gap: 6px; font-size: 13px;
+  font-family: var(--font-mono); color: #aaa; cursor: pointer;
+  flex-direction: row;
+}
+.type-opt input[type="radio"] { accent-color: var(--accent); cursor: pointer; }
+
+/* ---------- date section label ---------- */
+.date-section-label {
+  font-size: 11px; font-family: var(--font-mono); color: var(--accent);
+  text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; margin-top: 8px;
+  padding-bottom: 4px; border-bottom: 1px solid #282828;
+}
+
+/* ---------- task bar on timeline ---------- */
+.task-bar {
+  position: absolute; height: clamp(24px, 3vh, 32px); border-radius: 6px;
+  display: flex; align-items: center; gap: 6px; padding: 0 10px;
+  cursor: pointer; transition: all 0.2s; z-index: 8;
+  border: 1px solid #ffffff18; box-shadow: 0 2px 6px #0004;
+  overflow: hidden; white-space: nowrap;
+}
+.task-bar:hover { z-index: 25; box-shadow: 0 4px 12px #0008; filter: brightness(1.2); }
+.task-bar .task-title { font-size: 10px; font-weight: 700; color: #fff; }
+.task-bar .task-effort {
+  font-size: 8px; font-family: var(--font-mono); color: #ffffffaa;
+  margin-left: auto;
+}
+.task-bar .task-status {
+  font-size: 7px; font-family: var(--font-mono); font-weight: 700;
+  text-transform: uppercase; color: #ffffff88;
+}

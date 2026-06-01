@@ -43,6 +43,11 @@ const MILESTONES = [
   { id: "22-20260326", year: 2025, week: 42, title: "Wellness Retreat",         desc: "Weekend retreat — yoga, meditation, digital detox",       status: "planned",    tag: "Wellness" },
   { id: "23-20260326", year: 2026, week: 5,  title: "Half Marathon",            desc: "Registered for the January half marathon",                status: "planned",    tag: "Wellness" },
   { id: "24-20260326", year: 2026, week: 13, title: "One-Year Review",          desc: "Compare results to baseline, celebrate progress",         status: "planned",    tag: "Wellness" },
+
+  // --- Tasks (with duration) ---
+  { id: "25-20260326", type: "task", startYear: 2025, startWeek: 20, endYear: 2025, endWeek: 28, title: "Kitchen Reno Work",  desc: "Full remodel from demolition to completion", status: "inprogress", tag: "Home" },
+  { id: "26-20260326", type: "task", startYear: 2025, startWeek: 27, endYear: 2025, endWeek: 35, title: "Fit-Out Period",     desc: "Interior construction and installation",     status: "inprogress", tag: "Café" },
+  { id: "27-20260326", type: "task", startYear: 2025, startWeek: 8,  endYear: 2025, endWeek: 16, title: "Couch to 5K",        desc: "9-week running programme",                   status: "done",       tag: "Wellness" },
 ];
 
 const TAGS = ["Home", "Café", "Wellness"];
@@ -75,8 +80,33 @@ const TAG_PALETTE = [
   <div>
     <h1><span class="dot">●</span> Week-based planning timeline</h1>
     <p class="hint">shift+scroll to pan · ctrl+scroll to zoom · drag to reschedule · double-click timeline to add</p>
+    <p class="hint" style="color:#665e52;">Best experienced on a desktop or laptop display.</p>
   </div>
   <div class="toolbar">
+    <div class="help-wrap">
+      <button class="btn btn-danger" id="helpBtn">How to?</button>
+      <div class="help-popover" id="helpPopover">
+        <h3>How to use</h3>
+        <p><strong>Goal</strong> — a single point in time.<br>
+        Use for deadlines, milestones, or events.<br>
+        <em>Example: "Lease signed" on Mid March 2025.</em></p>
+        <p><strong>Task</strong> — spans a period of time.<br>
+        Use for ongoing work with a start and end date.<br>
+        Shows as a bar on the timeline. Effort is calculated automatically.<br>
+        <em>Example: "Kitchen renovation" from Early May to Mid August 2025.</em></p>
+        <p><strong>Tags</strong> — colour-coded project categories.<br>
+        Click <em>Tags</em> to add, rename, recolour, or delete.</p>
+        <p><strong>Statuses</strong> — track progress (Undefined → Planned → In Progress → Done).<br>
+        Click <em>Status</em> to customise.</p>
+        <p><strong>Filter</strong> — click status or tag pills to show/hide.</p>
+        <p><strong>Batch Add</strong> — paste multiple items at once.<br>
+        Goal: <code>title, date, e/m/l, tag, status</code><br>
+        Task: <code>title, date + Nw, e/m/l, tag, status</code><br>
+        Task: <code>title, date, e/m/l, tag, status, end, e/m/l</code></p>
+        <p style="border-top:1px solid #333;padding-top:10px;margin-top:10px;color:#E07A5F;">
+        <strong>Your data lives in this browser only.</strong> If you clear your data, switch browsers, or clear browser history, it's gone. Use <strong>Save Data</strong> regularly to keep a backup.</p>
+      </div>
+    </div>
     <button class="btn" id="zoomOut">Zoom −</button>
     <button class="btn" id="zoomIn">Zoom +</button>
     <button class="btn" id="resetView">Reset View</button>
@@ -113,16 +143,35 @@ const TAG_PALETTE = [
     <h2 id="modalTitle">Add Milestone</h2>
     <div id="fIdRow" style="display:none; font-size:10px; font-family:var(--font-mono); color:#555; margin-bottom:12px;">ID: <span id="fId"></span></div>
     <div class="fields">
+      <div class="type-toggle">
+        <label class="type-opt"><input type="radio" name="fType" value="goal" checked> Goal</label>
+        <label class="type-opt"><input type="radio" name="fType" value="task"> Task</label>
+      </div>
       <label>Title <input type="text" id="fTitle" placeholder="Milestone title"></label>
       <label>Description <input type="text" id="fDesc" placeholder="Brief description"></label>
-      <div class="row">
-        <label>Year <select id="fYear"></select></label>
-        <label>Month <select id="fMonth"></select></label>
+      <div id="dateSection">
+        <div id="dateLabelStart" class="date-section-label" style="display:none;">Start</div>
+        <div class="row">
+          <label>Year <select id="fYear"></select></label>
+          <label>Month <select id="fMonth"></select></label>
+        </div>
+        <label>When in month
+          <div class="period-picks" id="fPeriod"></div>
+        </label>
+        <div id="weekPreview" style="font-size:11px;font-family:var(--font-mono);color:#888;padding:2px 0 0;"></div>
       </div>
-      <label>When in month
-        <div class="period-picks" id="fPeriod"></div>
-      </label>
-      <div id="weekPreview" style="font-size:11px;font-family:var(--font-mono);color:#888;padding:2px 0 0;"></div>
+      <div id="endDateSection" style="display:none;">
+        <div class="date-section-label">End</div>
+        <div class="row">
+          <label>Year <select id="fEndYear"></select></label>
+          <label>Month <select id="fEndMonth"></select></label>
+        </div>
+        <label>When in month
+          <div class="period-picks" id="fEndPeriod"></div>
+        </label>
+        <div id="endWeekPreview" style="font-size:11px;font-family:var(--font-mono);color:#888;padding:2px 0 0;"></div>
+        <div id="effortPreview" style="font-size:12px;font-family:var(--font-mono);color:var(--accent);padding:4px 0 0;font-weight:700;"></div>
+      </div>
       <label>Tag
         <div style="display:flex;gap:8px;align-items:center;">
           <select id="fTag" style="flex:1;"></select>
@@ -175,7 +224,9 @@ const TAG_PALETTE = [
       One milestone per line. Fields separated by <b>,</b> (comma)
     </p>
     <p style="font-size:11px;font-family:var(--font-mono);color:#666;margin-bottom:12px;">
-      Format: <span style="color:#aaa;">title, date, early/mid/late, tag, status</span><br>
+      <span style="color:#aaa;">Goal:</span> title, date, e/m/l, tag, status<br>
+      <span style="color:#aaa;">Task:</span> title, date + Nw, e/m/l, tag, status<br>
+      <span style="color:#aaa;">Task:</span> title, date, e/m/l, tag, status, end date, e/m/l<br>
       Only title and date are required. Defaults: mid, no tag, undefined.<br>
       Date formats: <span style="color:#aaa;">Mar 2025, March 2025, 2025-03, 03/2025, 032025</span><br>
       Period shorthand: <span style="color:#aaa;">e = Early, m = Mid, l = Late</span><br>
@@ -185,10 +236,10 @@ const TAG_PALETTE = [
       width:100%; height:200px; padding:10px; font-size:12px; font-family:var(--font-mono);
       background:#222; color:var(--text); border:1px solid #333; border-radius:6px;
       outline:none; resize:vertical; line-height:1.6;
-    " placeholder="Design mockups, Jun 2025, e, Marketing
-Backend API, 2025-08, mid, Product, inprogress
-Public release, 11/2025, late, Product
-Quick fix, 032026, , Operations, done"></textarea>
+    " placeholder="Lease signed, Mar 2025, m, Café, done
+First 10K run, Aug 2025, l, Wellness
+Kitchen reno, May 2025 + 8w, e, Home, inprogress
+Staff training, Oct 2025, e, Café, planned, Nov 2025, l"></textarea>
     <div id="batchPreview" style="margin-top:10px;font-size:11px;font-family:var(--font-mono);color:#888;"></div>
     <div class="actions" style="margin-top:12px">
       <button class="btn btn-accent" id="batchImport">Import</button>

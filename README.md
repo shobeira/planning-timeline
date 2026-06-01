@@ -1,8 +1,18 @@
 # Week-based planning timeline
 
-A simple, interactive horizontal timeline for planning milestones across multiple life projects. No installation, no accounts, no internet required — just open a file in your browser.
+A simple, interactive horizontal timeline for planning goals and tasks across multiple life projects. No installation, no accounts, no internet required — just open a file in your browser.
 
-**[Live Demo →](https://timeline.shobeira.com)**
+<a href="https://timeline.shobeira.com" target="_blank"><strong>Live Demo →</strong></a>
+
+Best experienced on a desktop or laptop display.
+
+## What It Does
+
+**Goals** are single points in time — deadlines, milestones, or events. They appear as cards above the timeline axis, colour-coded by project.
+
+**Tasks** have a start and end date — ongoing work with duration. They appear as horizontal bars below the axis, showing the effort in weeks.
+
+Both can be tagged by project, tracked by status, filtered, dragged to reschedule, and batch-imported.
 
 ## How to Use
 
@@ -14,49 +24,46 @@ A simple, interactive horizontal timeline for planning milestones across multipl
 
 That's it. The app runs entirely in your browser. Nothing is sent to any server.
 
-### 2. Add Your First Milestone
+### 2. Add Goals and Tasks
 
-**Option A — Click the "+ Add" button** in the toolbar. Fill in:
-- **Title** — what's the milestone? (e.g. "Lease signed")
-- **Description** — optional details
-- **Year and Month** — when you're aiming for
-- **When in month** — Early, Mid, or Late (rough is fine — this is planning, not scheduling)
-- **Tag** — which project it belongs to (e.g. Home, Business, Health)
-- **Status** — Planned, In Progress, or Done
+**Option A — Click "+ Add"** in the toolbar. Choose **Goal** or **Task**, fill in the details:
+- **Title** and optional **Description**
+- **Date** — year, month, and Early/Mid/Late in month
+- **Tag** — which project it belongs to (create new tags inline with **+ New**)
+- **Status** — defaults to Undefined; change to Planned, In Progress, or Done
+- For **Tasks**: set both a start and end date. Effort is calculated automatically.
 
-**Option B — Double-click the timeline** at roughly the right time position. The add form opens pre-filled with that date.
+**Option B — Double-click the timeline** to add a goal at that position.
 
-**Option C — Batch Add** for adding many milestones at once. Click "Batch Add" and paste lines like:
+**Option C — Batch Add** for adding many items at once. Click "Batch Add" and paste lines:
 
 ```
-Kitchen renovation, May 2025, early, Home
-Lease signed, Mar 2025, mid, Business, done
-First 10K run, Aug 2025, late, Health
+# Goals
+Lease signed, Mar 2025, m, Café, done
+First 10K run, Aug 2025, l, Wellness
+
+# Tasks (with duration)
+Kitchen reno, May 2025 + 8w, e, Home, inprogress
+
+# Tasks (with end date)
+Staff training, Oct 2025, e, Café, planned, Nov 2025, l
 ```
 
-Format: `title, date, early/mid/late, tag, status` — only title and date are required.
+Format: `title, date, e/m/l, tag, status` — only title and date are required.
 
-Shorthand: `e` = Early, `m` = Mid, `l` = Late. Supported date formats: `Mar 2025`, `March 2025`, `2025-03`, `03/2025`, `032025`. Lines starting with `#` are ignored (comments).
+Shorthand: `e` = Early, `m` = Mid, `l` = Late. Date formats: `Mar 2025`, `March 2025`, `2025-03`, `03/2025`, `032025`. Lines starting with `#` are ignored.
 
 ### 3. Organise with Tags
 
-Tags are colour-coded categories for your projects. Click **Tags** in the toolbar to:
-- Add new tags
-- Rename or delete existing ones
-- Change tag colours
-
-Each milestone can have one tag. The coloured dots on the timeline match the tag colour, so you can see at a glance which project each milestone belongs to.
+Tags are colour-coded project categories. Click **Tags** in the toolbar to add, rename, recolour, or delete. You can also create tags inline when adding a goal or task using the **+ New** button.
 
 ### 4. Track Progress with Statuses
 
-Click **Status** in the toolbar to manage statuses. The defaults are Planned, In Progress, and Done — but you can rename them, add new ones, or change colours to fit how you work.
+Four default statuses: **Undefined → Planned → In Progress → Done**. Click **Status** in the toolbar to rename, add, or recolour them.
 
 ### 5. Filter Your View
 
-The filter bar below the toolbar lets you show/hide milestones by clicking the status or tag pills. For example:
-- Click "Done" to hide completed milestones and focus on what's ahead
-- Click a tag name to hide that project and reduce clutter
-- Combine both — show only "Planned" milestones for "Home"
+Click status or tag pills in the filter bar to show/hide items. Combine filters to focus — for example, show only "Planned" items for "Home".
 
 ### 6. Controls
 
@@ -65,27 +72,31 @@ The filter bar below the toolbar lets you show/hide milestones by clicking the s
 | Pan timeline | Hold **Shift** and scroll, or click-drag the timeline |
 | Zoom in/out | Hold **Ctrl** and scroll, or use **Zoom −** / **Zoom +** buttons |
 | Reset view | Click **Reset View** |
-| Add milestone | Click **+ Add**, or double-click the timeline |
+| Add goal | Click **+ Add** → select **Goal**, or double-click the timeline |
+| Add task | Click **+ Add** → select **Task**, set start and end dates |
 | Batch add | Click **Batch Add**, paste comma-separated lines |
-| Edit milestone | Hover a card → click **Edit**, or click it in the list below |
-| Delete milestone | Hover a card → click **Delete**, or use Delete in the edit dialog |
-| Reschedule | Drag a milestone card left or right |
-| Filter | Click status or tag pills in the filter bar to show/hide |
+| Edit | Hover a card → click **Edit**, or click it in the list below |
+| Delete | Hover a card → click **Delete**, or use Delete in the edit dialog |
+| Reschedule | Drag a goal card or task bar left or right |
+| Filter | Click status or tag pills in the filter bar |
 | Manage tags | Click **Tags** → add, rename, recolour, or delete |
 | Manage statuses | Click **Status** → add, rename, recolour, or delete |
 | Save data | Click **Save Data** → downloads a JSON file |
 | Load data | Click **Load Data** → import a JSON file |
 | Start fresh | Click **Clear All** (confirm to delete everything) |
+| Help | Hover over **How to?** for a quick guide |
 
 ### 7. Save and Load Your Data
 
 Your data **auto-saves** in your browser — close the tab and come back later, everything is still there.
 
+**Your data lives in this browser only.** If you clear your data, switch browsers, or clear browser history, it's gone. Use **Save Data** regularly to keep a backup.
+
 To **back up** or **move to another device**:
 1. Click **Save Data** — downloads a `timeline-data.json` file
 2. On the other device, click **Load Data** and select that file
 
-To **start fresh**, click **Clear All** (this deletes everything — save first if you want a backup).
+To **start fresh**, click **Clear All** (save first if you want a backup).
 
 ## File Structure
 
